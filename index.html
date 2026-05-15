@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Balance - Geopolitical Peace Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+        
+        body {
+            font-family: 'Share Tech Mono', monospace;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0f0f23 100%);
+        }
+        
+        .military-font {
+            font-family: 'Orbitron', sans-serif;
+        }
+        
+        .glow-text {
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.5), 0 0 20px rgba(0, 255, 136, 0.3);
+        }
+        
+        .alert-glow {
+            text-shadow: 0 0 10px rgba(255, 0, 0, 0.5), 0 0 20px rgba(255, 0, 0, 0.3);
+        }
+        
+        .panel-border {
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            box-shadow: inset 0 0 20px rgba(0, 255, 136, 0.05);
+        }
+        
+        .scan-line {
+            background: linear-gradient(transparent 50%, rgba(0, 255, 136, 0.02) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+        }
+        
+        .country-prosperity { fill: #00ff88; }
+        .country-conflict { fill: #ff4444; }
+        .country-collapsed { fill: #1a1a1a; }
+        
+        .news-scroll {
+            scrollbar-width: thin;
+            scrollbar-color: #00ff88 #1a1a2e;
+        }
+        
+        .news-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .news-scroll::-webkit-scrollbar-track {
+            background: #1a1a2e;
+        }
+        
+        .news-scroll::-webkit-scrollbar-thumb {
+            background: #00ff88;
+            border-radius: 3px;
+        }
+        
+        .action-btn:hover {
+            transform: scale(1.02);
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.4);
+        }
+        
+        .action-btn:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body class="min-h-screen text-green-400 overflow-x-hidden">
+    <!-- Scan Line Overlay -->
+    <div class="fixed inset-0 scan-line z-50 pointer-events-none"></div>
+    
+    <!-- Main Container -->
+    <div class="container mx-auto p-4 max-w-7xl">
+        <!-- Header -->
+        <header class="text-center mb-6">
+            <h1 class="military-font text-4xl md:text-5xl font-black glow-text tracking-wider mb-2">
+                GLOBAL BALANCE
+            </h1>
+            <p class="text-sm text-green-300 opacity-70">GEOPOLITICAL PEACE SIMULATOR v1.0</p>
+        </header>
+        
+        <!-- Global Stats Bar -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="panel-border bg-black/40 p-4 rounded-lg">
+                <p class="text-xs text-green-300 mb-1">WORLD POPULATION</p>
+                <p id="population" class="military-font text-2xl font-bold">8.0B</p>
+            </div>
+            <div class="panel-border bg-black/40 p-4 rounded-lg">
+                <p class="text-xs text-red-400 mb-1">WAR CASUALTIES</p>
+                <p id="casualties" class="military-font text-2xl font-bold text-red-400">0</p>
+            </div>
+            <div class="panel-border bg-black/40 p-4 rounded-lg">
+                <p class="text-xs text-green-300 mb-1">GLOBAL PEACE INDEX</p>
+                <p id="peace-index" class="military-font text-2xl font-bold">50%</p>
+            </div>
+            <div class="panel-border bg-black/40 p-4 rounded-lg">
+                <p class="text-xs text-yellow-400 mb-1">ECONOMIC STABILITY</p>
+                <p id="economy" class="military-font text-2xl font-bold text-yellow-400">75%</p>
+            </div>
+        </div>
+        
+        <!-- Main Dashboard Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left Panel: World Map -->
+            <div class="lg:col-span-2 panel-border bg-black/40 p-4 rounded-lg">
+                <h2 class="military-font text-lg mb-4 flex items-center gap-2">
+                    <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                    WORLD MAP
+                </h2>
+                <div id="world-map" class="w-full aspect-video bg-black/60 rounded-lg overflow-hidden">
+                    <svg viewBox="0 0 1000 500" class="w-full h-full" id="map-svg">
+                        <!-- Simplified world map regions -->
+                        <rect id="region-na" x="50" y="50" width="200" height="150" class="country-prosperity" stroke="#00ff88" stroke-width="1"/>
+                        <rect id="region-sa" x="100" y="220" width="120" height="180" class="country-prosperity" stroke="#00ff88" stroke-width="1"/>
+                        <rect id="region-eu" x="420" y="50" width="180" height="120" class="country-prosperity" stroke="#00ff88" stroke-width="1"/>
+                        <rect id="region-af" x="400" y="200" width="150" height="200" class="country-prosperity" stroke="#00ff88" stroke-width="1"/>
+                        <rect id="region-as" x="620" y="50" width="250" height="180" class="country-prosperity" stroke="#00ff88" stroke-width="1"/>
+                        <rect id="region-oc" x="750" y="280" width="150" height="120" class="country-prosperity" stroke="#00ff88" stroke-width="1"/>
+                        <rect id="region-me" x="500" y="150" width="100" height="100" class="country-prosperity" stroke="#00ff88" stroke-width="1"/>
+                        
+                        <!-- Region labels -->
+                        <text x="150" y="125" fill="#00ff8" font-size="20" text-anchor="middle">NORTH AMERICA</text>
+                        <text x="160" y="310" fill="#00ff8" font-size="16" text-anchor="middle">SOUTH AMERICA</text>
+                        <text x="510" y="110" fill="#00ff8" font-size="20" text-anchor="middle">EUROPE</text>
+                        <text x="475" y="300" fill="#00ff8" font-size="20" text-anchor="middle">AFRICA</text>
+                        <text x="745" y="140" fill="#00ff8" font-size="30" text-anchor="middle">ASIA</text>
+                        <text x="825" y="340" fill="#00ff8" font-size="24" text-anchor="middle">OCEANIA</text>
+                        <text x="550" y="200" fill="#00ff8" font-size="14" text-anchor="middle">MIDDLE EAST</text>
+                    </svg>
+                </div>
+                <div class="flex gap-4 mt-3 text-xs">
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 bg-green-400 rounded"></span> Prosperity</span>
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 bg-red-500 rounded"></span> Conflict</span>
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 bg-gray-800 rounded border border-gray-600"></span> Collapsed</span>
+                </div>
+            </div>
+            
+            <!-- Right Panel: Global News -->
+            <div class="panel-border bg-black/40 p-4 rounded-lg">
+                <h2 class="military-font text-lg mb-4 flex items-center gap-2">
+                    <span class="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></span>
+                    GLOBAL NEWS
+                </h2>
+                <div id="news-log" class="news-scroll h-64 overflow-y-auto space-y-2 text-sm">
+                    <div class="p-2 bg-green-900/20 border-l-2 border-green-400">
+                        <p class="text-green-300 text-xs">MONTH 0</p>
+                        <p>World leaders gather for peace summit. Global stability at 75%.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Turn Info Panel -->
+        <div class="panel-border bg-black/40 p-4 rounded-lg mt-6">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <p class="text-xs text-green-300">CURRENT TURN</p>
+                    <p id="current-turn" class="military-font text-2xl font-bold">Month 1 of 120</p>
+                </div>
+                <div>
+                    <p class="text-xs text-green-300">ROUND</p>
+                    <p id="current-round" class="military-font text-2xl font-bold">1 / 10</p>
+                </div>
+                <div>
+                    <p class="text-xs text-green-300">CURRENT PLAYER</p>
+                    <p id="current-player" class="military-font text-2xl font-bold glow-text">Player 1</p>
+                </div>
+                <div>
+                    <p class="text-xs text-green-300">PLAYERS REMAINING</p>
+                    <p id="players-remaining" class="military-font text-2xl font-bold">12/12</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Action Panel -->
+        <div id="action-panel" class="panel-border bg-black/40 p-6 rounded-lg mt-6">
+            <h2 class="military-font text-lg mb-4 text-center">SELECT YOUR ACTION</h2>
+            <div id="action-buttons" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Actions will be generated dynamically -->
+            </div>
+        </div>
+        
+        <!-- Game Over / Victory Screen -->
+        <div id="game-over-screen" class="hidden fixed inset-0 bg-black/90 z-40 flex items-center justify-center">
+            <div class="text-center p-8 panel-border bg-black/80 rounded-lg max-w-lg">
+                <h2 id="game-over-title" class="military-font text-4xl font-bold mb-4">GAME OVER</h2>
+                <p id="game-over-message" class="text-xl mb-6"></p>
+                <button onclick="restartGame()" class="px-8 py-3 bg-green-600 hover:bg-green-500 text-black font-bold rounded-lg military-font transition-all">
+                    RESTART SIMULATION
+                </button>
+            </div>
+        </div>
+        
+        <!-- Player Turn Modal -->
+        <div id="player-turn-modal" class="hidden fixed inset-0 bg-black/95 z-30 flex items-center justify-center">
+            <div class="text-center p-8 panel-border bg-black/80 rounded-lg max-w-2xl w-full mx-4">
+                <div class="mb-6">
+                    <p class="text-xs text-green-300 mb-2">MONTH <span id="modal-month">1</span></p>
+                    <h2 id="modal-player-name" class="military-font text-4xl font-bold mb-2 glow-text">PLAYER NAME</h2>
+                    <p class="text-yellow-400 text-sm">Select your action for this turn</p>
+                </div>
+                <div id="modal-action-buttons" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <!-- Action buttons will be generated here -->
+                </div>
+                <div class="text-xs text-gray-400">
+                    <p>Waiting for manual input...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // ============================================
+        // STATE MANAGEMENT SYSTEM
+        // ============================================
+        const GameState = {
+            worldPopulation: 8000000000, // 8 billion
+            warCasualties: 0,
+            globalPeaceIndex: 50, // percentage
+            economicStability: 75, // percentage
+            currentMonth: 1,
+            currentRound: 1,
+            maxRounds: 10,
+            totalTurns: 120, // 10 rounds * 12 players
+            currentPlayerIndex: 0,
+            playersRemaining: 12,
+            isGameOver: false,
+            nuclearWinterTriggered: false,
+            actionsThisTurn: [],
+            regionStates: {
+                'region-na': 'prosperity',
+                'region-sa': 'prosperity',
+                'region-eu': 'prosperity',
+                'region-af': 'prosperity',
+                'region-as': 'prosperity',
+                'region-oc': 'prosperity',
+                'region-me': 'prosperity'
+            }
+        };
+        
+        // Global impact scalar for slow-burn gameplay
+        // Reduces the weight of each action to create incremental changes
+        const impactScalar = 0.05;
+        
+        // Player definitions - all manual players
+        const Players = [
+            { id: 1, name: "United States", region: "region-na" },
+            { id: 2, name: "China", region: "region-as" },
+            { id: 3, name: "Russia", region: "region-eu" },
+            { id: 4, name: "European Union", region: "region-eu" },
+            { id: 5, name: "India", region: "region-as" },
+            { id: 6, name: "Brazil", region: "region-sa" },
+            { id: 7, name: "Japan", region: "region-as" },
+            { id: 8, name: "Germany", region: "region-eu" },
+            { id: 9, name: "United Kingdom", region: "region-eu" },
+            { id: 10, name: "South Africa", region: "region-af" },
+            { id: 11, name: "Australia", region: "region-oc" },
+            { id: 12, name: "Saudi Arabia", region: "region-me" }
+        ];
+        
+        // Action definitions with impact weights
+        const ActionPool = [
+            {
+                name: "Diplomatic Summit",
+                description: "Host peace talks with neighboring nations",
+                type: "diplomatic",
+                peaceImpact: 15,
+                economyImpact: 5,
+                tensionImpact: -10,
+                populationImpact: 0
+            },
+            {
+                name: "Humanitarian Aid",
+                description: "Send aid to conflict zones",
+                type: "ethical",
+                peaceImpact: 10,
+                economyImpact: -5,
+                tensionImpact: -5,
+                populationImpact: 2
+            },
+            {
+                name: "Economic Sanctions",
+                description: "Impose sanctions on aggressive nations",
+                type: "diplomatic",
+                peaceImpact: 5,
+                economyImpact: -10,
+                tensionImpact: 5,
+                populationImpact: -1
+            },
+            {
+                name: "Military Deployment",
+                description: "Deploy troops to border regions",
+                type: "aggressive",
+                peaceImpact: -15,
+                economyImpact: -10,
+                tensionImpact: 20,
+                populationImpact: -2
+            },
+            {
+                name: "Nuclear Test",
+                description: "Conduct underground nuclear test",
+                type: "aggressive",
+                peaceImpact: -25,
+                economyImpact: -5,
+                tensionImpact: 30,
+                populationImpact: 0
+            },
+            {
+                name: "Trade Agreement",
+                description: "Sign new trade deals with partners",
+                type: "economic",
+                peaceImpact: 5,
+                economyImpact: 15,
+                tensionImpact: -5,
+                populationImpact: 1
+            },
+            {
+                name: "Cyber Attack",
+                description: "Launch cyber operation against adversary",
+                type: "aggressive",
+                peaceImpact: -10,
+                economyImpact: -5,
+                tensionImpact: 15,
+                populationImpact: 0
+            },
+            {
+                name: "Peace Treaty",
+                description: "Sign comprehensive peace agreement",
+                type: "diplomatic",
+                peaceImpact: 20,
+                economyImpact: 10,
+                tensionImpact: -20,
+                populationImpact: 0
+            },
+            {
+                name: "Refugee Support",
+                description: "Accept and support displaced populations",
+                type: "ethical",
+                peaceImpact: 8,
+                economyImpact: -8,
+                tensionImpact: -3,
+                populationImpact: 3
+            },
+            {
+                name: "Military Alliance",
+                description: "Form defensive pact with allies",
+                type: "diplomatic",
+                peaceImpact: -5,
+                economyImpact: -5,
+                tensionImpact: 10,
+                populationImpact: 0
+            },
+            {
+                name: "Infrastructure Investment",
+                description: "Invest in domestic infrastructure",
+                type: "economic",
+                peaceImpact: 5,
+                economyImpact: 20,
+                tensionImpact: 0,
+                populationImpact: 2
+            },
+            {
+                name: "Espionage Operation",
+                description: "Conduct intelligence gathering",
+                type: "aggressive",
+                peaceImpact: -8,
+                economyImpact: -3,
+                tensionImpact: 12,
+                populationImpact: 0
+            }
+        ];
+        
+        // ============================================
+        // INFERENCE ENGINE - BUTTERFLY EFFECT
+        // ============================================
+        function processWorldEvolution() {
+            // Butterfly effect: small additional adjustments based on overall tension
+            const aggressiveActions = GameState.actionsThisTurn.filter(a => a.type === 'aggressive').length;
+            
+            // Apply small butterfly effect multiplier if peace is very low
+            if (GameState.globalPeaceIndex < 30) {
+                const butterflyEffect = 0.02; // Small additional drift
+                GameState.globalPeaceIndex = Math.max(0, GameState.globalPeaceIndex - butterflyEffect);
+            }
+            
+            // Check for nuclear winter (requires many aggressive actions and very low peace)
+            if (aggressiveActions >= 6 && GameState.globalPeaceIndex < 10) {
+                GameState.nuclearWinterTriggered = true;
+            }
+            
+            // Generate monthly summary news
+            generateNews(GameState.actionsThisTurn);
+            
+            // Clear actions for next turn
+            GameState.actionsThisTurn = [];
+        }
+        
+        function updateRegionStates() {
+            const regions = Object.keys(GameState.regionStates);
+            
+            regions.forEach(region => {
+                const randomFactor = Math.random() * 20 - 10; // -10 to +10
+                const effectivePeace = GameState.globalPeaceIndex + randomFactor;
+                
+                if (effectivePeace > 60) {
+                    GameState.regionStates[region] = 'prosperity';
+                } else if (effectivePeace > 30) {
+                    GameState.regionStates[region] = 'conflict';
+                } else {
+                    GameState.regionStates[region] = 'collapsed';
+                }
+            });
+            
+            // Update SVG colors
+            regions.forEach(region => {
+                const element = document.getElementById(region);
+                if (element) {
+                    element.classList.remove('country-prosperity', 'country-conflict', 'country-collapsed');
+                    element.classList.add(`country-${GameState.regionStates[region]}`);
+                }
+            });
+        }
+        
+        // ============================================
+        // NEWS SYSTEM
+        // ============================================
+        function generateSingleNews(action, playerName, peaceImpact, economyImpact, tensionImpact, casualties) {
+            const newsLog = document.getElementById('news-log');
+            const newsItem = document.createElement('div');
+            const isPositive = peaceImpact > 0;
+            
+            newsItem.className = `p-2 ${isPositive ? 'bg-green-900/20 border-l-2 border-green-400' : 'bg-red-900/20 border-l-2 border-red-400'}`;
+            
+            const impactText = [];
+            if (Math.abs(peaceImpact) > 0.01) {
+                impactText.push(`Peace: ${peaceImpact > 0 ? '+' : ''}${peaceImpact.toFixed(2)}%`);
+            }
+            if (Math.abs(economyImpact) > 0.01) {
+                impactText.push(`Economy: ${economyImpact > 0 ? '+' : ''}${economyImpact.toFixed(2)}%`);
+            }
+            if (casualties > 0) {
+                impactText.push(`Casualties: +${formatNumber(casualties)}`);
+            }
+            
+            newsItem.innerHTML = `
+                <p class="${isPositive ? 'text-green-300' : 'text-red-300'} text-xs">MONTH ${GameState.currentMonth} - ${playerName}</p>
+                <p class="font-bold mb-1">${action.name}</p>
+                <p class="text-xs opacity-80 mb-1">${action.description}</p>
+                <p class="text-xs ${isPositive ? 'text-green-400' : 'text-red-400'}">Impact: ${impactText.join(' | ')}</p>
+            `;
+            newsLog.appendChild(newsItem);
+            
+            // Auto-scroll to bottom
+            newsLog.scrollTop = newsLog.scrollHeight;
+        }
+        
+        function generateNews(actions) {
+            const newsLog = document.getElementById('news-log');
+            
+            // Add summary news at end of turn
+            const summaryItem = document.createElement('div');
+            const peaceTrend = GameState.globalPeaceIndex > 50 ? 'improving' : 'deteriorating';
+            summaryItem.className = `p-2 bg-yellow-900/20 border-l-2 border-yellow-400`;
+            summaryItem.innerHTML = `
+                <p class="text-yellow-300 text-xs">MONTH ${GameState.currentMonth} SUMMARY</p>
+                <p>Global peace index is ${peaceTrend}. Current level: ${GameState.globalPeaceIndex.toFixed(1)}% | Population: ${formatNumber(GameState.worldPopulation)} | Casualties: ${formatNumber(GameState.warCasualties)}</p>
+            `;
+            newsLog.appendChild(summaryItem);
+            
+            // Auto-scroll to bottom
+            newsLog.scrollTop = newsLog.scrollHeight;
+        }
+        
+        // ============================================
+        // ACTION SYSTEM
+        // ============================================
+        function generateActions() {
+            const actionButtons = document.getElementById('action-buttons');
+            actionButtons.innerHTML = '';
+            
+            // Randomly select 4 actions
+            const shuffled = [...ActionPool].sort(() => 0.5 - Math.random());
+            const selectedActions = shuffled.slice(0, 4);
+            
+            selectedActions.forEach((action, index) => {
+                const btn = document.createElement('button');
+                const isPositive = action.peaceImpact > 0;
+                
+                btn.className = `action-btn p-4 rounded-lg border-2 transition-all duration-200 ${
+                    isPositive 
+                        ? 'border-green-500/50 bg-green-900/20 hover:bg-green-900/40' 
+                        : 'border-red-500/50 bg-red-900/20 hover:bg-red-900/40'
+                }`;
+                btn.innerHTML = `
+                    <h3 class="military-font font-bold mb-2 ${isPositive ? 'text-green-300' : 'text-red-300'}">${action.name}</h3>
+                    <p class="text-xs opacity-80 mb-2">${action.description}</p>
+                    <div class="text-xs space-y-1">
+                        <p>Peace: <span class="${action.peaceImpact > 0 ? 'text-green-400' : 'text-red-400'}">${action.peaceImpact > 0 ? '+' : ''}${action.peaceImpact}%</span></p>
+                        <p>Economy: <span class="${action.economyImpact > 0 ? 'text-green-400' : 'text-red-400'}">${action.economyImpact > 0 ? '+' : ''}${action.economyImpact}%</span></p>
+                    </div>
+                `;
+                btn.onclick = () => executeAction(action);
+                actionButtons.appendChild(btn);
+            });
+        }
+        
+        function executeAction(action) {
+            const currentPlayer = Players[GameState.currentPlayerIndex];
+            
+            // Apply immediate impact with scalar multiplier
+            const scaledPeaceImpact = action.peaceImpact * impactScalar;
+            const scaledEconomyImpact = action.economyImpact * impactScalar;
+            const scaledTensionImpact = action.tensionImpact * impactScalar;
+            const scaledPopulationImpact = action.populationImpact * impactScalar;
+            
+            // Apply impacts to global state immediately
+            GameState.globalPeaceIndex = Math.max(0, Math.min(100, GameState.globalPeaceIndex + scaledPeaceImpact));
+            GameState.economicStability = Math.max(0, Math.min(100, GameState.economicStability + scaledEconomyImpact));
+            
+            // Calculate casualties based on tension
+            const newCasualties = Math.max(0, Math.floor(scaledTensionImpact * 1000));
+            GameState.warCasualties += newCasualties;
+            
+            // Update population
+            const populationChange = Math.floor(scaledPopulationImpact * 1000000) - newCasualties;
+            GameState.worldPopulation = Math.max(0, GameState.worldPopulation + populationChange);
+            
+            // Update region states immediately
+            updateRegionStates();
+            
+            // Generate news entry with immediate impact
+            generateSingleNews(action, currentPlayer.name, scaledPeaceImpact, scaledEconomyImpact, scaledTensionImpact, newCasualties);
+            
+            // Record action for tracking
+            GameState.actionsThisTurn.push({
+                ...action,
+                player: currentPlayer.name
+            });
+            
+            // Move to next player
+            GameState.currentPlayerIndex++;
+            GameState.playersRemaining--;
+            
+            // Check if all players have moved
+            if (GameState.currentPlayerIndex >= Players.length) {
+                // Process world evolution for butterfly effects
+                processWorldEvolution();
+                
+                // Advance to next month
+                GameState.currentMonth++;
+                GameState.currentPlayerIndex = 0;
+                GameState.playersRemaining = 12;
+                
+                // Check game conditions
+                checkGameConditions();
+            }
+            
+            // Update UI immediately
+            updateUI();
+            
+            // Generate new actions if game not over
+            if (!GameState.isGameOver) {
+                generateActions();
+            }
+        }
+        
+        // ============================================
+        // UI UPDATES
+        // ============================================
+        function updateUI() {
+            // Update stats
+            document.getElementById('population').textContent = formatNumber(GameState.worldPopulation);
+            document.getElementById('casualties').textContent = formatNumber(GameState.warCasualties);
+            document.getElementById('peace-index').textContent = GameState.globalPeaceIndex.toFixed(1) + '%';
+            document.getElementById('economy').textContent = GameState.economicStability.toFixed(1) + '%';
+            
+            // Update turn info
+            document.getElementById('current-turn').textContent = `Month ${GameState.currentMonth}`;
+            document.getElementById('current-player').textContent = Players[GameState.currentPlayerIndex].name;
+            document.getElementById('players-remaining').textContent = `${GameState.playersRemaining}/12`;
+            
+            // Color code peace index
+            const peaceElement = document.getElementById('peace-index');
+            if (GameState.globalPeaceIndex > 60) {
+                peaceElement.className = 'military-font text-2xl font-bold text-green-400';
+            } else if (GameState.globalPeaceIndex > 30) {
+                peaceElement.className = 'military-font text-2xl font-bold text-yellow-400';
+            } else {
+                peaceElement.className = 'military-font text-2xl font-bold text-red-400 alert-glow';
+            }
+        }
+        
+        function formatNumber(num) {
+            if (num >= 1000000000) {
+                return (num / 1000000000).toFixed(1) + 'B';
+            } else if (num >= 1000000) {
+                return (num / 1000000).toFixed(1) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            }
+            return num.toString();
+        }
+        
+        // ============================================
+        // GAME CONDITIONS
+        // ============================================
+        function checkGameConditions() {
+            // Victory condition
+            if (GameState.globalPeaceIndex >= 100) {
+                endGame(true, 'Global peace achieved! World leaders have successfully created a peaceful world.');
+                return;
+            }
+            
+            // Game over conditions
+            if (GameState.worldPopulation <= 0) {
+                endGame(false, 'Humanity has been wiped out. The world is silent.');
+                return;
+            }
+            
+            if (GameState.nuclearWinterTriggered) {
+                endGame(false, 'Nuclear winter has been triggered. Civilization as we know it has ended.');
+                return;
+            }
+            
+            if (GameState.economicStability <= 0) {
+                endGame(false, 'Global economic collapse has led to total societal breakdown.');
+                return;
+            }
+        }
+        
+        function endGame(victory, message) {
+            GameState.isGameOver = true;
+            
+            const gameOverScreen = document.getElementById('game-over-screen');
+            const gameOverTitle = document.getElementById('game-over-title');
+            const gameOverMessage = document.getElementById('game-over-message');
+            
+            if (victory) {
+                gameOverTitle.textContent = 'VICTORY';
+                gameOverTitle.className = 'military-font text-4xl font-bold mb-4 text-green-400 glow-text';
+            } else {
+                gameOverTitle.textContent = 'GAME OVER';
+                gameOverTitle.className = 'military-font text-4xl font-bold mb-4 text-red-400 alert-glow';
+            }
+            
+            gameOverMessage.textContent = message;
+            gameOverScreen.classList.remove('hidden');
+        }
+        
+        function restartGame() {
+            // Reset game state
+            GameState.worldPopulation = 8000000000;
+            GameState.warCasualties = 0;
+            GameState.globalPeaceIndex = 50;
+            GameState.economicStability = 75;
+            GameState.currentMonth = 1;
+            GameState.currentPlayerIndex = 0;
+            GameState.playersRemaining = 12;
+            GameState.isGameOver = false;
+            GameState.nuclearWinterTriggered = false;
+            GameState.actionsThisTurn = [];
+            
+            // Reset region states
+            Object.keys(GameState.regionStates).forEach(region => {
+                GameState.regionStates[region] = 'prosperity';
+            });
+            
+            // Hide game over screen
+            document.getElementById('game-over-screen').classList.add('hidden');
+            
+            // Clear news log
+            const newsLog = document.getElementById('news-log');
+            newsLog.innerHTML = `
+                <div class="p-2 bg-green-900/20 border-l-2 border-green-400">
+                    <p class="text-green-300 text-xs">MONTH 0</p>
+                    <p>World leaders gather for peace summit. Global stability at 75%.</p>
+                </div>
+            `;
+            
+            // Update UI and generate actions
+            updateUI();
+            updateRegionStates();
+            generateActions();
+        }
+        
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        function initGame() {
+            updateUI();
+            updateRegionStates();
+            generateActions();
+        }
+        
+        // Start the game when page loads
+        window.onload = initGame;
+    </script>
+</body>
+</html>
