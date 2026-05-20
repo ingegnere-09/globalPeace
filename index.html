@@ -795,21 +795,77 @@
             const country = GameState.countries[countryId];
             const target = GameState.countries[targetId];
             
-            if (country.relations[targetId] >= 40 && !country.alliances.includes(targetId)) {
-                country.alliances.push(targetId);
-                target.alliances.push(countryId);
-                changeRelations(countryId, targetId, 20);
-                addNews(`${country.name} and ${target.name} have formed an alliance!`, 'positive');
-                
-                // Track for summary
-                GameState.turnEvents.newAlliances.push({
-                    country1: country.name,
-                    country2: target.name
-                });
-                
-                return true;
+            console.log(`proposeAlliance called: ${country.name} -> ${target.name}, relations: ${country.relations[targetId]}`);
+            
+            if (country.alliances.includes(targetId) || target.alliances.includes(countryId)) {
+                console.log(`Alliance already exists between ${country.name} and ${target.name}`);
+                return; // Already allied
             }
-            return false;
+            
+            // SHARED ENEMY LOGIC - form alliance if they share enemies
+            const sharedEnemies = country.wars.filter(warId => target.wars.includes(warId));
+            if (sharedEnemies.length > 0 && country.relations[targetId] > 15) {
+                console.log(`Shared enemies detected, allowing alliance with relations ${country.relations[targetId]}`);
+                // Can form alliance with lower relations if they share enemies
+                // Proceed with alliance
+            } else {
+                // NORMAL THRESHOLD - easier to form alliances
+                if (country.relations[targetId] < 20) {
+                    console.log(`Relations too poor for alliance: ${country.relations[targetId]} < 20`);
+                    return; // Relations too poor (lowered to 20)
+                }
+            }
+            
+            country.alliances.push(targetId);
+            target.alliances.push(countryId);
+            
+            country.relations[targetId] += 25;
+            target.relations[countryId] += 25;
+            
+            addNews(`${country.name} and ${target.name} formed an alliance!`, 'positive');
+            console.log(`ALLIANCE FORMED: ${country.name} + ${target.name}`);
+            
+            // Track for summary
+            GameState.turnEvents.newAlliances.push({
+                country1: country.name,
+                country2: target.name
+            });
+            
+            // GLOBAL BLOC SYSTEM - enemies of allies become enemies
+            applyGlobalBlocLogic(countryId, targetId);
+        }
+        
+        // GLOBAL BLOC SYSTEM - when two countries ally, their enemies become each other's enemies
+        function applyGlobalBlocLogic(countryId, targetId) {
+            const country = GameState.countries[countryId];
+            const target = GameState.countries[targetId];
+            
+            // Country's enemies become target's enemies
+            country.wars.forEach(warId => {
+                if (!target.wars.includes(warId) && target.relations[warId] > -30) {
+                    target.relations[warId] -= 15; // Worsen relations with ally's enemies
+                }
+            });
+            
+            // Target's enemies become country's enemies
+            target.wars.forEach(warId => {
+                if (!country.wars.includes(warId) && country.relations[warId] > -30) {
+                    country.relations[warId] -= 15; // Worsen relations with ally's enemies
+                }
+            });
+            
+            // Improve relations with ally's other allies
+            country.alliances.forEach(allyId => {
+                if (allyId !== targetId && !target.alliances.includes(allyId)) {
+                    target.relations[allyId] += 10;
+                }
+            });
+            
+            target.alliances.forEach(allyId => {
+                if (allyId !== countryId && !country.alliances.includes(allyId)) {
+                    country.relations[allyId] += 10;
+                }
+            });
         }
         
         function declareWar(countryId, targetId) {
@@ -919,61 +975,102 @@
             
             const personality = GameState.aiPersonality;
             
-            // Aggressive AI - Prefers RED actions (aggressive)
+            // CONSTANT THREAT EVALUATION - AI evaluates threats every turn
+            evaluateThreats(countryId);
+            
+            // ALLIANCE BETRAYAL LOGIC - opportunistic AI may betray weak allies
+            if (personality === 'aggressive' && country.alliances.length > 0) {
+                const weakAllies = country.alliances.filter(allyId => {
+                    const ally = GameState.countries[allyId];
+                    return ally.military < country.military * 0.4 && Math.random() < 0.1;
+                });
+                if (weakAllies.length > 0) {
+                    const allyToBetray = weakAllies[0];
+                    country.alliances = country.alliances.filter(id => id !== allyToBetray);
+                    GameState.countries[allyToBetray].alliances = GameState.countries[allyToBetray].alliances.filter(id => id !== countryId);
+                    country.relations[allyToBetray] -= 30;
+                    addNews(`${country.name} betrayed alliance with ${GameState.countries[allyToBetray].name}!`, 'critical');
+                }
+            }
+            
+            // Aggressive AI - Prefers RED actions (aggressive), MUCH MORE ACTIVE
             if (personality === 'aggressive') {
-                // 60% chance of aggressive action, 30% neutral, 10% good
+                // 70% chance of aggressive action, 25% neutral, 5% good
                 const actionRoll = Math.random();
                 
-                if (actionRoll < 0.6) {
+                if (actionRoll < 0.7) {
                     // RED: Aggressive actions
                     const aggressiveActions = ['Economic Sanctions', 'Sabotage', 'Cyber Attack', 'Destabilization'];
                     const action = aggressiveActions[Math.floor(Math.random() * aggressiveActions.length)];
                     
+                    console.log(`${country.name} executing aggressive action: ${action}`);
+                    
                     if (action === 'Economic Sanctions') {
-                        country.diplomacy -= 15;
-                        country.economy -= 3;
-                        addNews(`${country.name} imposed economic sanctions.`, 'critical');
+                        // Target ANY country to create tension
+                        const potentialTargets = Object.keys(country.relations).filter(id => 
+                            !country.alliances.includes(id) && !country.wars.includes(id)
+                        );
+                        if (potentialTargets.length > 0) {
+                            const targetId = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+                            changeRelations(countryId, targetId, -15);
+                            country.economy -= 3;
+                            addNews(`${country.name} imposed economic sanctions on ${GameState.countries[targetId].name}.`, 'critical');
+                        }
                     } else if (action === 'Sabotage') {
-                        const targetId = Object.keys(country.relations).find(id => country.relations[id] < -20);
-                        if (targetId) {
-                            country.diplomacy -= 10;
+                        const potentialTargets = Object.keys(country.relations).filter(id => 
+                            !country.alliances.includes(id) && !country.wars.includes(id)
+                        );
+                        if (potentialTargets.length > 0) {
+                            const targetId = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+                            changeRelations(countryId, targetId, -10);
                             GameState.countries[targetId].stability -= 5;
                             addNews(`${country.name} sabotaged ${GameState.countries[targetId].name}.`, 'critical');
                         }
                     } else if (action === 'Cyber Attack') {
-                        country.diplomacy -= 12;
-                        country.technology += 3;
-                        addNews(`${country.name} launched a cyber attack.`, 'critical');
+                        const potentialTargets = Object.keys(country.relations).filter(id => 
+                            !country.alliances.includes(id) && !country.wars.includes(id)
+                        );
+                        if (potentialTargets.length > 0) {
+                            const targetId = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+                            changeRelations(countryId, targetId, -12);
+                            country.technology += 3;
+                            addNews(`${country.name} launched cyber attack on ${GameState.countries[targetId].name}.`, 'critical');
+                        }
                     } else if (action === 'Destabilization') {
-                        const targetId = Object.keys(country.relations).find(id => country.relations[id] < -30);
-                        if (targetId) {
-                            country.diplomacy -= 20;
+                        const potentialTargets = Object.keys(country.relations).filter(id => 
+                            !country.alliances.includes(id) && !country.wars.includes(id)
+                        );
+                        if (potentialTargets.length > 0) {
+                            const targetId = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+                            changeRelations(countryId, targetId, -20);
                             GameState.countries[targetId].stability -= 10;
                             addNews(`${country.name} destabilized ${GameState.countries[targetId].name}.`, 'critical');
                         }
                     }
                     
-                    // Consider declaring war
+                    // Consider declaring war - LOWERED THRESHOLD, INCREASED CHANCE
                     const potentialTargets = Object.keys(country.relations).filter(id => {
-                        return country.relations[id] < -30 && 
+                        return country.relations[id] < -25 && // Lowered from -40
                                !country.wars.includes(id) &&
-                               country.military > GameState.countries[id].military * 0.6;
+                               country.military > GameState.countries[id].military * 0.4; // Lowered from 0.5
                     });
-                    if (potentialTargets.length > 0 && Math.random() < 0.5) {
+                    if (potentialTargets.length > 0 && Math.random() < 0.8) { // Increased from 0.7
                         const target = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+                        console.log(`${country.name} declaring war on ${GameState.countries[target].name}`);
                         declareWar(countryId, target);
                     }
-                } else if (actionRoll < 0.9) {
+                } else if (actionRoll < 0.95) {
                     // YELLOW: Neutral actions
                     country.economy += 3;
-                    country.military += 2;
+                    country.military += 3;
                     addNews(`${country.name} strengthened military and economy.`, 'neutral');
                 } else {
-                    // GREEN: Good actions (rare)
+                    // GREEN: Good actions (very rare)
                     const potentialAllies = Object.keys(country.relations).filter(id => {
-                        return country.relations[id] > 30 && !country.alliances.includes(id);
+                        return country.relations[id] > 15 && !country.alliances.includes(id); // Lowered from 25
                     });
-                    if (potentialAllies.length > 0 && Math.random() < 0.3) {
+                    if (potentialAllies.length > 0 && Math.random() < 0.7) { // Increased from 0.5
+                        console.log(`${country.name} proposing alliance with ${GameState.countries[potentialAllies[0]].name}`);
                         proposeAlliance(countryId, potentialAllies[0]);
                     } else {
                         country.diplomacy += 5;
@@ -993,10 +1090,12 @@
                     country.stability += 3;
                     addNews(`${country.name} sent diplomatic aid.`, 'positive');
                     
+                    // Form alliances more easily
                     const potentialAllies = Object.keys(country.relations).filter(id => {
-                        return country.relations[id] > 40 && !country.alliances.includes(id);
+                        return country.relations[id] > 15 && !country.alliances.includes(id); // Lowered from 30
                     });
-                    if (potentialAllies.length > 0 && Math.random() < 0.6) {
+                    if (potentialAllies.length > 0 && Math.random() < 0.8) { // Increased from 0.7
+                        console.log(`${country.name} (pacifist) proposing alliance with ${GameState.countries[potentialAllies[0]].name}`);
                         proposeAlliance(countryId, potentialAllies[0]);
                     }
                 } else if (actionRoll < 0.9) {
@@ -1015,7 +1114,7 @@
             
             // Neutral AI - Mix of YELLOW + occasional RED/GREEN
             if (personality === 'neutral') {
-                // 40% neutral, 30% good, 30% aggressive
+                // 40% neutral, 35% good, 25% aggressive (increased aggressive)
                 const actionRoll = Math.random();
                 
                 if (actionRoll < 0.4) {
@@ -1023,24 +1122,26 @@
                     country.economy += 3;
                     country.technology += 2;
                     addNews(`${country.name} engaged in trade and research.`, 'neutral');
-                } else if (actionRoll < 0.7) {
+                } else if (actionRoll < 0.75) {
                     // GREEN: Good actions
                     country.diplomacy += 5;
                     const potentialAllies = Object.keys(country.relations).filter(id => {
-                        return country.relations[id] > 35 && !country.alliances.includes(id);
+                        return country.relations[id] > 15 && !country.alliances.includes(id); // Lowered from 30
                     });
-                    if (potentialAllies.length > 0 && Math.random() < 0.4) {
+                    if (potentialAllies.length > 0 && Math.random() < 0.6) { // Increased from 0.5
+                        console.log(`${country.name} (neutral) proposing alliance with ${GameState.countries[potentialAllies[0]].name}`);
                         proposeAlliance(countryId, potentialAllies[0]);
                     }
                 } else {
                     // RED: Aggressive actions (opportunistic)
                     const potentialTargets = Object.keys(country.relations).filter(id => {
-                        return country.relations[id] < -40 && 
+                        return country.relations[id] < -25 && // Lowered from -35
                                !country.wars.includes(id) &&
-                               country.military > GameState.countries[id].military * 0.7;
+                               country.military > GameState.countries[id].military * 0.5; // Lowered from 0.6
                     });
-                    if (potentialTargets.length > 0 && Math.random() < 0.3) {
+                    if (potentialTargets.length > 0 && Math.random() < 0.5) { // Increased from 0.4
                         const target = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+                        console.log(`${country.name} (neutral) declaring war on ${GameState.countries[target].name}`);
                         declareWar(countryId, target);
                     } else {
                         country.military += 3;
@@ -1050,55 +1151,105 @@
             }
         }
         
+        // CONSTANT THREAT EVALUATION - AI evaluates threats every turn
+        function evaluateThreats(countryId) {
+            const country = GameState.countries[countryId];
+            
+            // Calculate total threat from enemies
+            let totalThreat = 0;
+            Object.keys(country.relations).forEach(targetId => {
+                if (country.relations[targetId] < -20) {
+                    const target = GameState.countries[targetId];
+                    const threat = target.military / (country.military || 1);
+                    totalThreat += threat;
+                }
+            });
+            
+            // If under high threat, seek allies more aggressively
+            if (totalThreat > 1.5 && country.alliances.length < 3) {
+                const potentialAllies = Object.keys(country.relations).filter(id => {
+                    return country.relations[id] > 20 && !country.alliances.includes(id);
+                });
+                if (potentialAllies.length > 0 && Math.random() < 0.4) {
+                    proposeAlliance(countryId, potentialAllies[0]);
+                }
+            }
+            
+            // If very strong, become more aggressive
+            if (totalThreat < 0.5 && country.military > 60) {
+                Object.keys(country.relations).forEach(targetId => {
+                    if (country.relations[targetId] > -10 && country.relations[targetId] < 20) {
+                        changeRelations(countryId, targetId, -2);
+                    }
+                });
+            }
+        }
+        
         // ============================================
         // DYNAMIC DIPLOMACY EVOLUTION
         // ============================================
         function evolveDiplomacy() {
+            console.log('evolveDiplomacy called');
             Object.keys(GameState.countries).forEach(countryId => {
                 const country = GameState.countries[countryId];
-                if (country.isCollapsed) return;
-                
-                // Store previous relations for tracking changes
-                if (!GameState.previousStats[countryId]) {
-                    GameState.previousStats[countryId] = { relations: {} };
-                }
                 
                 Object.keys(country.relations).forEach(targetId => {
-                    const previousRelation = GameState.previousStats[countryId].relations[targetId] || country.relations[targetId];
-                    
-                    // Natural drift based on proximity and random factors
-                    const drift = (Math.random() * 4 - 2);
-                    country.relations[targetId] = Math.max(-100, Math.min(100, country.relations[targetId] + drift));
-                    
-                    // Alliance of my enemy is my enemy
+                    const relation = country.relations[targetId];
                     const target = GameState.countries[targetId];
-                    target.alliances.forEach(allyId => {
-                        if (allyId !== countryId && !country.alliances.includes(allyId)) {
-                            country.relations[allyId] = Math.max(-100, country.relations[allyId] - 2);
-                        }
-                    });
                     
-                    // Enemy of my enemy is my friend
-                    target.wars.forEach(enemyId => {
-                        if (enemyId !== countryId && !country.wars.includes(enemyId)) {
-                            country.relations[enemyId] = Math.min(100, country.relations[enemyId] + 1);
-                        }
-                    });
+                    if (target.isCollapsed) return;
                     
-                    // Track significant changes
-                    const change = Math.abs(country.relations[targetId] - previousRelation);
-                    if (change > 10) {
+                    // NATURAL DRIFT - relations change every turn
+                    // Allied countries slowly gain relations
+                    if (country.alliances.includes(targetId)) {
+                        changeRelations(countryId, targetId, 2);
+                    }
+                    
+                    // Enemies slowly lose relations
+                    if (country.wars.includes(targetId)) {
+                        changeRelations(countryId, targetId, -5); // Wars rapidly destroy diplomacy
+                    }
+                    
+                    // Natural drift towards neutral (slower)
+                    if (relation > 30) {
+                        changeRelations(countryId, targetId, -1);
+                    } else if (relation < -30) {
+                        changeRelations(countryId, targetId, 1);
+                    }
+                    
+                    // Alliances of enemies - worsen relations
+                    const enemyAllies = target.alliances.filter(allyId => 
+                        country.relations[allyId] < -20
+                    );
+                    if (enemyAllies.length > 0) {
+                        changeRelations(countryId, targetId, -3); // Increased from -2
+                    }
+                    
+                    // Enemies of enemies - improve relations
+                    const enemyEnemies = target.wars.filter(warId => 
+                        country.relations[warId] < -20
+                    );
+                    if (enemyEnemies.length > 0) {
+                        changeRelations(countryId, targetId, 3); // Increased from 2
+                    }
+                    
+                    // Trade slowly improves relations (simulated by positive drift for neutral countries)
+                    if (relation > -10 && relation < 10) {
+                        changeRelations(countryId, targetId, 1);
+                    }
+                    
+                    // Track significant changes for summary
+                    if (Math.abs(relation - country.relations[targetId]) >= 10) {
                         GameState.turnEvents.diplomaticChanges.push({
                             country: country.name,
                             target: target.name,
-                            change: Math.round(country.relations[targetId] - previousRelation),
-                            newRelation: Math.round(country.relations[targetId])
+                            change: country.relations[targetId] - relation,
+                            newRelation: country.relations[targetId]
                         });
                     }
-                    
-                    GameState.previousStats[countryId].relations[targetId] = country.relations[targetId];
                 });
             });
+            console.log('evolveDiplomacy completed');
         }
         
         // ============================================
@@ -1513,7 +1664,7 @@
             
             // Add alliance proposals to good actions
             const potentialAllies = Object.keys(country.relations).filter(id => 
-                country.relations[id] > 40 && !country.alliances.includes(id)
+                country.relations[id] > 20 && !country.alliances.includes(id)
             );
             if (potentialAllies.length > 0) {
                 goodActions.push({ 
@@ -1633,7 +1784,7 @@
             // Auto-advance to next turn
             setTimeout(() => {
                 advanceToNextTurn();
-            }, 1000);
+            }, 500);
         }
         
         // Execute human action and unlock turn
