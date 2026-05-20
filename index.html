@@ -298,28 +298,9 @@
                 </div>
             </div>
             
-            <!-- Step 2: AI Personality -->
+            <!-- Step 2: Country Selection -->
             <div id="setup-step-2" class="mb-8 hidden">
-                <h2 class="military-font text-xl mb-4 text-yellow-400">STEP 2: SELECT AI PERSONALITY</h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <button onclick="selectAIPersonality('aggressive')" class="ai-personality-btn action-btn p-6 rounded-lg border-2 border-red-500/50 bg-red-900/20 hover:bg-red-900/40">
-                        <h3 class="military-font text-xl font-bold text-red-400 mb-2">AGGRESSIVE</h3>
-                        <p class="text-xs opacity-80">Prioritizes military expansion, starts wars frequently</p>
-                    </button>
-                    <button onclick="selectAIPersonality('neutral')" class="ai-personality-btn action-btn p-6 rounded-lg border-2 border-yellow-500/50 bg-yellow-900/20 hover:bg-yellow-900/40">
-                        <h3 class="military-font text-xl font-bold text-yellow-400 mb-2">NEUTRAL</h3>
-                        <p class="text-xs opacity-80">Balanced approach, reacts to threats</p>
-                    </button>
-                    <button onclick="selectAIPersonality('pacifist')" class="ai-personality-btn action-btn p-6 rounded-lg border-2 border-blue-500/50 bg-blue-900/20 hover:bg-blue-900/40">
-                        <h3 class="military-font text-xl font-bold text-blue-400 mb-2">PACIFIST</h3>
-                        <p class="text-xs opacity-80">Avoids wars, prefers diplomacy and alliances</p>
-                    </button>
-                </div>
-            </div>
-            
-            <!-- Step 3: Country Selection -->
-            <div id="setup-step-3" class="mb-8 hidden">
-                <h2 class="military-font text-xl mb-4 text-yellow-400">STEP 3: SELECT COUNTRIES FOR HUMAN PLAYERS</h2>
+                <h2 class="military-font text-xl mb-4 text-yellow-400">STEP 2: SELECT COUNTRIES FOR HUMAN PLAYERS</h2>
                 <p class="text-sm mb-4" id="country-selection-prompt">Player 1, select your country:</p>
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6" id="country-selection-grid">
                     <!-- Countries will be populated dynamically -->
@@ -648,7 +629,6 @@
             currentCountryIndex: 0,
             isGameOver: false,
             humanPlayerCount: 1,
-            aiPersonality: 'neutral',
             selectedCountries: [],
             currentSelectionPlayer: 0,
             countries: {},
@@ -675,21 +655,7 @@
                 if (btn.textContent == count) btn.classList.add('selected');
             });
             document.getElementById('setup-step-2').classList.remove('hidden');
-        }
-        
-        function selectAIPersonality(personality) {
-            GameState.aiPersonality = personality;
-            document.querySelectorAll('.ai-personality-btn').forEach(btn => {
-                btn.classList.remove('selected');
-            });
-            event.target.closest('.ai-personality-btn').classList.add('selected');
-            
-            if (GameState.humanPlayerCount > 0) {
-                document.getElementById('setup-step-3').classList.remove('hidden');
-                populateCountrySelection();
-            } else {
-                document.getElementById('setup-start-btn').classList.remove('hidden');
-            }
+            populateCountrySelection();
         }
         
         function populateCountrySelection() {
@@ -726,21 +692,52 @@
             }
         }
         
+        // Assign AI personalities to countries with mixed distribution
+        function assignAIPersonalities() {
+            const aiCountries = CountryDefinitions.filter(def => 
+                !GameState.selectedCountries.includes(def.id)
+            );
+            
+            const totalAI = aiCountries.length;
+            
+            // Calculate distribution: 2/5 aggressive, 2/5 pacifist, 1/5 neutral
+            // Round up for aggressive and neutral, remaining are pacifist
+            const aggressiveCount = Math.ceil(totalAI * 0.4);
+            const neutralCount = Math.ceil(totalAI * 0.2);
+            const pacifistCount = totalAI - aggressiveCount - neutralCount;
+            
+            // Shuffle AI countries
+            const shuffled = [...aiCountries].sort(() => Math.random() - 0.5);
+            
+            // Assign personalities
+            shuffled.slice(0, aggressiveCount).forEach(def => {
+                GameState.countries[def.id].aiPersonality = 'aggressive';
+            });
+            
+            shuffled.slice(aggressiveCount, aggressiveCount + neutralCount).forEach(def => {
+                GameState.countries[def.id].aiPersonality = 'neutral';
+            });
+            
+            shuffled.slice(aggressiveCount + neutralCount).forEach(def => {
+                GameState.countries[def.id].aiPersonality = 'pacifist';
+            });
+            
+            console.log(`AI Personalities assigned: ${aggressiveCount} aggressive, ${neutralCount} neutral, ${pacifistCount} pacifist`);
+        }
+        
         // ============================================
         // COUNTRY STATS SYSTEM
         // ============================================
         function initializeCountries() {
             CountryDefinitions.forEach(def => {
                 const isHuman = GameState.selectedCountries.includes(def.id);
-                const baseAggression = isHuman ? 50 : 
-                    GameState.aiPersonality === 'aggressive' ? 75 :
-                    GameState.aiPersonality === 'pacifist' ? 25 : 50;
                 
                 GameState.countries[def.id] = {
                     id: def.id,
                     name: def.name,
                     isHuman: isHuman,
                     controllerType: isHuman ? 'human' : 'ai',
+                    aiPersonality: isHuman ? null : 'neutral', // Will be assigned later
                     x: def.x,
                     y: def.y,
                     economy: 50 + Math.random() * 20 - 10,
@@ -750,7 +747,7 @@
                     population: 50 + Math.random() * 30,
                     happiness: 50 + Math.random() * 20 - 10,
                     technology: 50 + Math.random() * 20 - 10,
-                    aggression: baseAggression + Math.random() * 10 - 5,
+                    aggression: 50 + Math.random() * 10 - 5,
                     alliances: [],
                     wars: [],
                     relations: {},
@@ -763,6 +760,23 @@
                         GameState.countries[def.id].relations[other.id] = Math.floor(Math.random() * 40 - 20);
                     }
                 });
+            });
+            
+            // Assign AI personalities with mixed distribution
+            assignAIPersonalities();
+            
+            // Set aggression based on AI personality
+            CountryDefinitions.forEach(def => {
+                const country = GameState.countries[def.id];
+                if (!country.isHuman && country.aiPersonality) {
+                    if (country.aiPersonality === 'aggressive') {
+                        country.aggression = 75 + Math.random() * 10 - 5;
+                    } else if (country.aiPersonality === 'pacifist') {
+                        country.aggression = 25 + Math.random() * 10 - 5;
+                    } else {
+                        country.aggression = 50 + Math.random() * 10 - 5;
+                    }
+                }
             });
         }
         
@@ -1029,7 +1043,7 @@
             const country = GameState.countries[countryId];
             if (country.isCollapsed || country.isHuman) return;
             
-            const personality = GameState.aiPersonality;
+            const personality = country.aiPersonality;
             
             // CONSTANT THREAT EVALUATION - AI evaluates threats every turn
             evaluateThreats(countryId);
