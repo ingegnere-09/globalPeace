@@ -211,11 +211,67 @@
             box-shadow: 0 0 15px rgba(255, 68, 68, 0.5);
             transform: scale(1.02);
         }
+        
+        .notification-container {
+            position: fixed;
+            top: 100px;
+            left: 20px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+        
+        .notification {
+            pointer-events: auto;
+            min-width: 300px;
+            max-width: 400px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards;
+        }
+        
+        .notification.critical {
+            border-color: rgba(255, 68, 68, 0.8);
+            background: rgba(40, 0, 0, 0.95);
+        }
+        
+        .notification.positive {
+            border-color: rgba(0, 255, 136, 0.8);
+            background: rgba(0, 40, 20, 0.95);
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-100%);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+            }
+            to {
+                opacity: 0;
+            }
+        }
     </style>
 </head>
 <body class="min-h-screen text-green-400 overflow-x-hidden">
     <!-- Scan Line Overlay -->
     <div class="fixed inset-0 scan-line z-50 pointer-events-none"></div>
+    
+    <!-- Notification Container -->
+    <div id="notification-container" class="notification-container"></div>
     
     <!-- SETUP SCREEN -->
     <div id="setup-screen" class="fixed inset-0 bg-black/95 z-40 flex items-center justify-center p-4">
@@ -1312,6 +1368,35 @@
             
             newsLog.appendChild(newsItem);
             newsLog.scrollTop = newsLog.scrollHeight;
+            
+            // Show notification for important news only (critical and positive)
+            if (severity === 'critical' || severity === 'positive') {
+                showNotification(headline, severity);
+            }
+        }
+        
+        function showNotification(headline, severity) {
+            const container = document.getElementById('notification-container');
+            const notification = document.createElement('div');
+            
+            notification.className = `notification ${severity}`;
+            
+            const icon = severity === 'critical' ? '⚠️' : '🤝';
+            const textColor = severity === 'critical' ? 'text-red-400' : 'text-green-400';
+            
+            notification.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">${icon}</span>
+                    <p class="${textColor} font-bold text-sm">${headline}</p>
+                </div>
+            `;
+            
+            container.appendChild(notification);
+            
+            // Remove notification after 3 seconds (animation handles fade out)
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
         }
         
         // ============================================
