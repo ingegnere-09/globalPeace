@@ -175,6 +175,42 @@
             background: rgba(0, 255, 136, 0.3);
             border-color: rgba(0, 255, 136, 0.8);
         }
+        
+        .action-btn-good {
+            border-color: rgba(0, 255, 136, 0.6);
+            background: rgba(0, 255, 136, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .action-btn-good:hover {
+            background: rgba(0, 255, 136, 0.3);
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.5);
+            transform: scale(1.02);
+        }
+        
+        .action-btn-neutral {
+            border-color: rgba(255, 204, 0, 0.6);
+            background: rgba(255, 204, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .action-btn-neutral:hover {
+            background: rgba(255, 204, 0, 0.3);
+            box-shadow: 0 0 15px rgba(255, 204, 0, 0.5);
+            transform: scale(1.02);
+        }
+        
+        .action-btn-aggressive {
+            border-color: rgba(255, 68, 68, 0.6);
+            background: rgba(255, 68, 68, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .action-btn-aggressive:hover {
+            background: rgba(255, 68, 68, 0.3);
+            box-shadow: 0 0 15px rgba(255, 68, 68, 0.5);
+            transform: scale(1.02);
+        }
     </style>
 </head>
 <body class="min-h-screen text-green-400 overflow-x-hidden">
@@ -883,97 +919,133 @@
             
             const personality = GameState.aiPersonality;
             
-            // Aggressive AI - MUCH MORE AGGRESSIVE
+            // Aggressive AI - Prefers RED actions (aggressive)
             if (personality === 'aggressive') {
-                // Prioritize military heavily
-                country.military += 3;
-                country.economy -= 0.3;
+                // 60% chance of aggressive action, 30% neutral, 10% good
+                const actionRoll = Math.random();
                 
-                // Look for weak countries to attack - lower threshold, higher chance
-                const potentialTargets = Object.keys(country.relations).filter(id => {
-                    return country.relations[id] < -20 && 
-                           !country.wars.includes(id) &&
-                           country.military > GameState.countries[id].military * 0.6;
-                });
-                
-                if (potentialTargets.length > 0 && Math.random() < 0.5) {
-                    const target = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
-                    declareWar(countryId, target);
-                }
-                
-                // Seek allies when weak - more aggressive seeking
-                if (country.military < 50 && country.alliances.length < 3) {
-                    const potentialAllies = Object.keys(country.relations).filter(id => {
-                        return country.relations[id] > 20 && !country.alliances.includes(id);
+                if (actionRoll < 0.6) {
+                    // RED: Aggressive actions
+                    const aggressiveActions = ['Economic Sanctions', 'Sabotage', 'Cyber Attack', 'Destabilization'];
+                    const action = aggressiveActions[Math.floor(Math.random() * aggressiveActions.length)];
+                    
+                    if (action === 'Economic Sanctions') {
+                        country.diplomacy -= 15;
+                        country.economy -= 3;
+                        addNews(`${country.name} imposed economic sanctions.`, 'critical');
+                    } else if (action === 'Sabotage') {
+                        const targetId = Object.keys(country.relations).find(id => country.relations[id] < -20);
+                        if (targetId) {
+                            country.diplomacy -= 10;
+                            GameState.countries[targetId].stability -= 5;
+                            addNews(`${country.name} sabotaged ${GameState.countries[targetId].name}.`, 'critical');
+                        }
+                    } else if (action === 'Cyber Attack') {
+                        country.diplomacy -= 12;
+                        country.technology += 3;
+                        addNews(`${country.name} launched a cyber attack.`, 'critical');
+                    } else if (action === 'Destabilization') {
+                        const targetId = Object.keys(country.relations).find(id => country.relations[id] < -30);
+                        if (targetId) {
+                            country.diplomacy -= 20;
+                            GameState.countries[targetId].stability -= 10;
+                            addNews(`${country.name} destabilized ${GameState.countries[targetId].name}.`, 'critical');
+                        }
+                    }
+                    
+                    // Consider declaring war
+                    const potentialTargets = Object.keys(country.relations).filter(id => {
+                        return country.relations[id] < -30 && 
+                               !country.wars.includes(id) &&
+                               country.military > GameState.countries[id].military * 0.6;
                     });
-                    if (potentialAllies.length > 0) {
+                    if (potentialTargets.length > 0 && Math.random() < 0.5) {
+                        const target = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+                        declareWar(countryId, target);
+                    }
+                } else if (actionRoll < 0.9) {
+                    // YELLOW: Neutral actions
+                    country.economy += 3;
+                    country.military += 2;
+                    addNews(`${country.name} strengthened military and economy.`, 'neutral');
+                } else {
+                    // GREEN: Good actions (rare)
+                    const potentialAllies = Object.keys(country.relations).filter(id => {
+                        return country.relations[id] > 30 && !country.alliances.includes(id);
+                    });
+                    if (potentialAllies.length > 0 && Math.random() < 0.3) {
                         proposeAlliance(countryId, potentialAllies[0]);
+                    } else {
+                        country.diplomacy += 5;
+                        addNews(`${country.name} sent diplomatic aid.`, 'positive');
                     }
                 }
-                
-                // Rapidly worsen relations with potential rivals
-                Object.keys(country.relations).forEach(id => {
-                    if (country.relations[id] > -20 && country.relations[id] < 30 && Math.random() < 0.3) {
-                        changeRelations(countryId, id, -5);
-                    }
-                });
             }
             
-            // Pacifist AI - More active diplomacy
+            // Pacifist AI - Prefers GREEN + YELLOW actions, rarely RED
             if (personality === 'pacifist') {
-                // Prioritize diplomacy and economy
-                country.diplomacy += 3;
-                country.economy += 1.5;
-                country.happiness += 1.5;
+                // 50% good, 40% neutral, 10% aggressive
+                const actionRoll = Math.random();
                 
-                // Improve relations more aggressively
-                Object.keys(country.relations).forEach(id => {
-                    if (country.relations[id] < 60) {
-                        changeRelations(countryId, id, 3);
+                if (actionRoll < 0.5) {
+                    // GREEN: Good actions
+                    country.diplomacy += 8;
+                    country.stability += 3;
+                    addNews(`${country.name} sent diplomatic aid.`, 'positive');
+                    
+                    const potentialAllies = Object.keys(country.relations).filter(id => {
+                        return country.relations[id] > 40 && !country.alliances.includes(id);
+                    });
+                    if (potentialAllies.length > 0 && Math.random() < 0.6) {
+                        proposeAlliance(countryId, potentialAllies[0]);
                     }
-                });
-                
-                // Form alliances more frequently
-                const potentialAllies = Object.keys(country.relations).filter(id => {
-                    return country.relations[id] > 35 && !country.alliances.includes(id);
-                });
-                if (potentialAllies.length > 0 && Math.random() < 0.6) {
-                    proposeAlliance(countryId, potentialAllies[0]);
+                } else if (actionRoll < 0.9) {
+                    // YELLOW: Neutral actions
+                    country.economy += 4;
+                    country.happiness += 3;
+                    addNews(`${country.name} improved domestic policies.`, 'neutral');
+                } else {
+                    // RED: Aggressive actions (very rare, only in self-defense)
+                    if (country.wars.length > 0) {
+                        country.military += 5;
+                        addNews(`${country.name} bolstered defenses.`, 'neutral');
+                    }
                 }
             }
             
-            // Neutral AI - More balanced but reactive
+            // Neutral AI - Mix of YELLOW + occasional RED/GREEN
             if (personality === 'neutral') {
-                // Balanced approach
-                country.economy += 1;
-                country.military += 1;
-                country.diplomacy += 1;
+                // 40% neutral, 30% good, 30% aggressive
+                const actionRoll = Math.random();
                 
-                // React to threats more strongly
-                if (country.wars.length > 0) {
-                    country.military += 3;
-                    country.economy -= 0.5;
-                }
-                
-                // Seek allies if at war or weak
-                if ((country.wars.length > 0 || country.military < 45) && country.alliances.length < 3) {
+                if (actionRoll < 0.4) {
+                    // YELLOW: Neutral actions
+                    country.economy += 3;
+                    country.technology += 2;
+                    addNews(`${country.name} engaged in trade and research.`, 'neutral');
+                } else if (actionRoll < 0.7) {
+                    // GREEN: Good actions
+                    country.diplomacy += 5;
                     const potentialAllies = Object.keys(country.relations).filter(id => {
-                        return country.relations[id] > 15 && !country.alliances.includes(id);
+                        return country.relations[id] > 35 && !country.alliances.includes(id);
                     });
-                    if (potentialAllies.length > 0) {
+                    if (potentialAllies.length > 0 && Math.random() < 0.4) {
                         proposeAlliance(countryId, potentialAllies[0]);
                     }
-                }
-                
-                // Consider war if relations are very bad
-                const potentialTargets = Object.keys(country.relations).filter(id => {
-                    return country.relations[id] < -40 && 
-                           !country.wars.includes(id) &&
-                           country.military > GameState.countries[id].military * 0.7;
-                });
-                if (potentialTargets.length > 0 && Math.random() < 0.2) {
-                    const target = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
-                    declareWar(countryId, target);
+                } else {
+                    // RED: Aggressive actions (opportunistic)
+                    const potentialTargets = Object.keys(country.relations).filter(id => {
+                        return country.relations[id] < -40 && 
+                               !country.wars.includes(id) &&
+                               country.military > GameState.countries[id].military * 0.7;
+                    });
+                    if (potentialTargets.length > 0 && Math.random() < 0.3) {
+                        const target = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+                        declareWar(countryId, target);
+                    } else {
+                        country.military += 3;
+                        addNews(`${country.name} increased military readiness.`, 'neutral');
+                    }
                 }
             }
         }
@@ -1427,55 +1499,97 @@
             document.getElementById('turn-wars').textContent = 
                 country.wars.map(id => GameState.countries[id]?.name || 'Unknown').join(', ') || 'None';
             
-            // Show action menu - NEVER show "AI is thinking..."
+            // Show categorized action menu - NEVER show "AI is thinking..."
             const actionsDiv = document.getElementById('turn-actions');
             actionsDiv.innerHTML = '';
             document.getElementById('end-turn-btn').disabled = false;
             
-            const actions = [
-                { name: 'Invest in Economy', effect: { economy: 5 }, desc: 'Boost economic growth' },
-                { name: 'Military Buildup', effect: { military: 5 }, desc: 'Strengthen military' },
-                { name: 'Diplomatic Mission', effect: { diplomacy: 5 }, desc: 'Improve relations' },
-                { name: 'Stability Measures', effect: { stability: 5 }, desc: 'Increase stability' },
-                { name: 'Tech Research', effect: { technology: 5 }, desc: 'Advance technology' },
-                { name: 'Public Works', effect: { happiness: 5 }, desc: 'Boost happiness' }
+            // 🟢 GOOD ACTIONS
+            const goodActions = [
+                { name: 'Diplomatic Aid', effect: { diplomacy: 8, stability: 3 }, desc: 'Send diplomatic aid to improve relations', category: 'good' },
+                { name: 'Economic Support', effect: { economy: 6, diplomacy: 4 }, desc: 'Provide economic support to allies', category: 'good' },
+                { name: 'Humanitarian Aid', effect: { stability: 8, happiness: 5, diplomacy: 3 }, desc: 'Send humanitarian aid to boost stability', category: 'good' }
             ];
             
-            // Add war/peace actions
-            const potentialEnemies = Object.keys(country.relations).filter(id => 
-                country.relations[id] < -30 && !country.wars.includes(id)
-            );
-            if (potentialEnemies.length > 0) {
-                actions.push({ 
-                    name: 'Declare War', 
-                    effect: {}, 
-                    desc: `Attack ${GameState.countries[potentialEnemies[0]].name}`,
-                    warTarget: potentialEnemies[0]
-                });
-            }
-            
+            // Add alliance proposals to good actions
             const potentialAllies = Object.keys(country.relations).filter(id => 
                 country.relations[id] > 40 && !country.alliances.includes(id)
             );
             if (potentialAllies.length > 0) {
-                actions.push({ 
+                goodActions.push({ 
                     name: 'Propose Alliance', 
-                    effect: {}, 
+                    effect: { diplomacy: 10 },
                     desc: `Ally with ${GameState.countries[potentialAllies[0]].name}`,
-                    allyTarget: potentialAllies[0]
+                    allyTarget: potentialAllies[0],
+                    category: 'good'
                 });
             }
             
-            actions.forEach(action => {
-                const btn = document.createElement('button');
-                btn.className = 'action-btn p-2 rounded-lg border-2 border-green-500/50 bg-green-900/20 hover:bg-green-900/40 text-left';
-                btn.innerHTML = `
-                    <h4 class="font-bold text-green-300 text-sm">${action.name}</h4>
-                    <p class="text-xs opacity-80">${action.desc}</p>
-                `;
-                btn.onclick = () => executeHumanAction(countryId, action);
-                actionsDiv.appendChild(btn);
-            });
+            // 🟡 NEUTRAL ACTIONS
+            const neutralActions = [
+                { name: 'Trade Agreement', effect: { economy: 5, diplomacy: 2 }, desc: 'Establish trade agreement', category: 'neutral' },
+                { name: 'Espionage', effect: { diplomacy: -3, technology: 5 }, desc: 'Low-intelligence espionage operation', category: 'neutral' },
+                { name: 'Resource Exchange', effect: { economy: 4, stability: 2 }, desc: 'Exchange resources with partners', category: 'neutral' },
+                { name: 'Internal Reforms', effect: { stability: 6, happiness: 4 }, desc: 'Implement domestic reforms', category: 'neutral' },
+                { name: 'Intelligence Gathering', effect: { technology: 4, diplomacy: -2 }, desc: 'Gather intelligence on rivals', category: 'neutral' }
+            ];
+            
+            // 🔴 BAD / AGGRESSIVE ACTIONS
+            const aggressiveActions = [
+                { name: 'Economic Sanctions', effect: { diplomacy: -15, economy: -3 }, desc: 'Impose economic sanctions on rival', category: 'aggressive' },
+                { name: 'Sabotage', effect: { diplomacy: -10, stability: -5 }, desc: 'Sabotage enemy infrastructure', category: 'aggressive' },
+                { name: 'Cyber Attack', effect: { diplomacy: -12, technology: 3 }, desc: 'Launch cyber attack against enemy', category: 'aggressive' },
+                { name: 'Destabilization', effect: { diplomacy: -20, stability: -10 }, desc: 'Destabilize enemy government', category: 'aggressive' }
+            ];
+            
+            // Add declare war to aggressive actions
+            const potentialEnemies = Object.keys(country.relations).filter(id => 
+                country.relations[id] < -30 && !country.wars.includes(id)
+            );
+            if (potentialEnemies.length > 0) {
+                aggressiveActions.push({ 
+                    name: 'Declare War', 
+                    effect: { diplomacy: -50 },
+                    desc: `Attack ${GameState.countries[potentialEnemies[0]].name}`,
+                    warTarget: potentialEnemies[0],
+                    category: 'aggressive'
+                });
+            }
+            
+            // Render actions by category
+            const renderActions = (actions, category) => {
+                actions.forEach(action => {
+                    const btn = document.createElement('button');
+                    let btnClass = 'action-btn p-2 rounded-lg border-2 text-left';
+                    
+                    if (category === 'good') {
+                        btnClass += ' action-btn-good';
+                    } else if (category === 'neutral') {
+                        btnClass += ' action-btn-neutral';
+                    } else if (category === 'aggressive') {
+                        btnClass += ' action-btn-aggressive';
+                    }
+                    
+                    const categoryLabel = category === 'good' ? '🟢' : category === 'neutral' ? '🟡' : '🔴';
+                    const textColor = category === 'good' ? 'text-green-300' : category === 'neutral' ? 'text-yellow-300' : 'text-red-300';
+                    
+                    btn.className = btnClass;
+                    btn.innerHTML = `
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs">${categoryLabel}</span>
+                            <h4 class="font-bold ${textColor} text-sm">${action.name}</h4>
+                        </div>
+                        <p class="text-xs opacity-80 mt-1">${action.desc}</p>
+                    `;
+                    btn.onclick = () => executeHumanAction(countryId, action);
+                    actionsDiv.appendChild(btn);
+                });
+            };
+            
+            // Render all categories
+            renderActions(goodActions, 'good');
+            renderActions(neutralActions, 'neutral');
+            renderActions(aggressiveActions, 'aggressive');
             
             // Show turn actions panel
             switchPanel('turn-actions');
@@ -1526,17 +1640,23 @@
         function executeHumanAction(countryId, action) {
             const country = GameState.countries[countryId];
             
-            console.log(`Human action executed: ${action.name} for ${country.name}`);
+            console.log(`Human action executed: ${action.name} (${action.category}) for ${country.name}`);
             
             if (action.warTarget) {
                 declareWar(countryId, action.warTarget);
+                addNews(`${country.name} declared war on ${GameState.countries[action.warTarget].name}!`, 'critical');
             } else if (action.allyTarget) {
                 proposeAlliance(countryId, action.allyTarget);
             } else {
+                // Apply stat effects
                 Object.keys(action.effect).forEach(stat => {
                     country[stat] = Math.max(0, Math.min(100, country[stat] + action.effect[stat]));
                 });
-                addNews(`${country.name}: ${action.name}`, 'neutral');
+                
+                // Add news based on action category
+                const severity = action.category === 'aggressive' ? 'critical' : 
+                                 action.category === 'good' ? 'positive' : 'neutral';
+                addNews(`${country.name}: ${action.name}`, severity);
             }
             
             evolveCountryStats(countryId);
